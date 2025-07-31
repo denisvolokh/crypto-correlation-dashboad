@@ -1,0 +1,13 @@
+# 📈 Crypto Correlation Dashboard
+
+A real-time dashboard that tracks and visualizes the correlation between BTC and ETH using live data, Deno, Server-Sent Events (SSE), NATS, and Chart.js.
+
+## Features
+
+- Live BTC and ETH price ingestion via external APIs
+- Real-time correlation calculation between BTC and ETH
+- Event-driven architecture with NATS for internal messaging
+- Live UI updates via SSE and Chart.js
+- Compact and responsive dashboard UI
+- Docker Compose for easy deployment
+

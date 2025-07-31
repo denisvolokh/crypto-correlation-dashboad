@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Crypto Correlation Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/luxon@3/build/global/luxon.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon@1"></script>
+    <style>
+        body {
+            font-family: sans-serif;
+            padding: 2rem;
+            max-width: 1000px;
+            margin: auto;
+        }
+        h1 {
+            color: #4a4cb3;
+            margin-bottom: 1rem;
+        }
+        #metricsRow {
+            display: flex;
+            gap: 2rem;
+            margin-bottom: 1rem;
+            font-size: 1rem;
+        }
+        #metricsRow span {
+            display: inline-block;
+            min-width: 160px;
+        }
+    </style>
+</head>
+<body>
+    <h1>📉 Crypto Correlation Dashboard</h1>
+
+    <div id="metricsRow">
+        <span><strong>BTC:</strong> <span id="btc">-</span></span>
+        <span><strong>ETH:</strong> <span id="eth">-</span></span>
+        <span><strong>Correlation:</strong> <span id="corr">-</span></span>
+        <span><strong>Updated:</strong> <span id="time">-</span></span>
+    </div>
+
+    <canvas id="priceChart" width="800" height="300"></canvas>
+</body>
+
+
+
+<script>
+    const ctx = document.getElementById('priceChart').getContext('2d');
+
+    // Track raw prices
+    const btcRaw = [];
+    const ethRaw = [];
+
+    const priceChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: [],
+            datasets: [
+                {
+                    label: 'BTC % Change',
+                    data: [],
+                    borderColor: 'orange',
+                    yAxisID: 'y',
+                    fill: false,
+                },
+                {
+                    label: 'ETH % Change',
+                    data: [],
+                    borderColor: 'blue',
+                    yAxisID: 'y',
+                    fill: false,
+                },
+                {
+                    label: 'Correlation',
+                    data: [],
+                    borderColor: 'green',
+                    yAxisID: 'y1',
+                    fill: false,
+                    tension: 0.4,
+                    borderDash: [5, 5],
+                    pointRadius: 0,
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            animation: false,
+            scales: {
+                x: {
+                    type: 'time',
+                    time: {
+                        unit: 'second',
+                        tooltipFormat: 'HH:mm:ss',
+                        displayFormats: {
+                            second: 'HH:mm:ss'  // ✅ shorter label format
+                        }
+                    },
+                    title: {
+                        display: true,
+                        text: 'Time'
+                    },
+                    ticks: {
+                        maxTicksLimit: 10,     // ✅ enforce max tick count
+                        autoSkip: true,        // ✅ auto skip overlapping
+                        maxRotation: 0,        // ✅ keep horizontal
+                        minRotation: 0
+                    }
+                },
+                y: {
+                    title: {
+                        display: true,
+                        text: '% Change'
+                    },
+                    ticks: {
+                        callback: (value) => `${value.toFixed(2)}%`
+                    }
+                },
+                y1: {
+                    position: 'right',
+                    title: {
+                        display: true,
+                        text: 'Correlation'
+                    },
+                    min: -1,
+                    max: 1,
+                    grid: {
+                        drawOnChartArea: false
+                    }
+                }
+            }
+        }
+    });
+
+    const evtSource = new EventSource("/events");
+
+    evtSource.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        const ts = new Date(data.timestamp);
+
+        document.getElementById("btc").textContent = data.btc;
+        document.getElementById("eth").textContent = data.eth;
+        document.getElementById("corr").textContent = data.correlation;
+        document.getElementById("time").textContent = ts.toLocaleTimeString();
+
+        // Rolling % change
+        btcRaw.push(data.btc);
+        ethRaw.push(data.eth);
+        if (btcRaw.length > 60) btcRaw.shift();
+        if (ethRaw.length > 60) ethRaw.shift();
+
+        const lookback = 5; // 5-point lookback
+        const baseBTC = btcRaw[btcRaw.length - lookback] || data.btc;
+        const baseETH = ethRaw[ethRaw.length - lookback] || data.eth;
+
+        const btcChange = ((data.btc - baseBTC) / baseBTC) * 100;
+        const ethChange = ((data.eth - baseETH) / baseETH) * 100;
+
+        // Update chart
+        priceChart.data.labels.push(ts);
+        priceChart.data.datasets[0].data.push(btcChange);
+        priceChart.data.datasets[1].data.push(ethChange);
+        priceChart.data.datasets[2].data.push(data.correlation);
+
+        const maxPoints = 60;
+        if (priceChart.data.labels.length > maxPoints) {
+            priceChart.data.labels.shift();
+            priceChart.data.datasets.forEach(ds => ds.data.shift());
+        }
+
+        priceChart.update();
+
+        // Correlation alert
+        const alertEl = document.getElementById("corrAlert");
+        if (data.correlation >= 0.8) {
+            alertEl.textContent = "📈 Strong Positive Correlation";
+            alertEl.style.color = "green";
+        } else if (data.correlation <= -0.8) {
+            alertEl.textContent = "📉 Strong Negative Correlation";
+            alertEl.style.color = "red";
+        } else {
+            alertEl.textContent = "📊 Moderate or Weak Correlation";
+            alertEl.style.color = "gray";
+        }
+    };
+</script>
+</html>

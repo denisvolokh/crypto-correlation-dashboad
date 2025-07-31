@@ -1,0 +1,45 @@
+version: '3.9'
+
+services:
+  # NATS message broker
+  nats:
+    image: nats:2.10-alpine
+    ports:
+      - "4222:4222"
+    healthcheck:
+      test: ["CMD", "sh", "-c", "nc -z localhost 4222"]
+      interval: 3s
+      timeout: 2s
+      retries: 5
+
+  # Ingestor service (pulls data from external API and publishes to NATS)
+  ingestor:
+    build:
+      context: .
+      dockerfile: Dockerfiles/ingestor.Dockerfile
+    depends_on:
+      nats:
+        condition: service_healthy
+    command: deno run --allow-net --allow-env --allow-read --allow-write ingestor/main.ts
+
+  # Correlator service (subscribes to prices and publishes correlation)
+  correlator:
+    build:
+      context: .
+      dockerfile: Dockerfiles/correlator.Dockerfile
+    depends_on:
+      nats:
+        condition: service_healthy
+    command: deno run --allow-net --allow-read correlator/main.ts
+
+  # Dashboard SSE + static file server
+  dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfiles/dashboard.Dockerfile
+    depends_on:
+      nats:
+        condition: service_healthy
+    command: deno run --allow-net --allow-read dashboard/server.ts
+    ports:
+      - "8000:8000"
